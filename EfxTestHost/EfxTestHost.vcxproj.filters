@@ -18,12 +18,18 @@
     <ClInclude Include="..\dsp_wrapper.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="wav_writer.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\dsp_wrapper.c">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="main.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="wav_writer.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

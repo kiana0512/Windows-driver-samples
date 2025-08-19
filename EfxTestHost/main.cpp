@@ -1,105 +1,349 @@
-#include <iostream>
-#include <fstream>
+﻿// main.cpp — EFX 离线验证批量测试
+// 作用：生成输入扫频(48k/float/立体声)；分别用不同参数/块大小/采样率/就地处理跑一遍 DSP；
+//      导出多份 out_*.wav，便于在 Audacity 中同时对比波形/频谱/响度变化。
+
+#define _USE_MATH_DEFINES
 #include <cmath>
 #include <cstdint>
 #include <vector>
-#include "dsp_wrapper.h"
-#define _USE_MATH_DEFINES
-#include <math.h>
+#include <string>
+#include <iostream>
+#include <algorithm>
+#include <chrono>
 
-static void write_wav_header(std::ofstream &ofs, uint32_t sampleRate, uint16_t channels, uint32_t samples) {
-    uint32_t byteRate = sampleRate * channels * 2; // 16-bit PCM
-    uint32_t dataSize = samples * channels * 2;
-    ofs.seekp(0);
-    ofs.write("RIFF", 4);
-    uint32_t chunkSize = 36 + dataSize;
-    ofs.write(reinterpret_cast<const char*>(&chunkSize), 4);
-    ofs.write("WAVE", 4);
-    ofs.write("fmt ", 4);
-    uint32_t subchunk1Size = 16;
-    ofs.write(reinterpret_cast<const char*>(&subchunk1Size), 4);
-    uint16_t audioFormat = 1; // PCM
-    ofs.write(reinterpret_cast<const char*>(&audioFormat), 2);
-    ofs.write(reinterpret_cast<const char*>(&channels), 2);
-    ofs.write(reinterpret_cast<const char*>(&sampleRate), 4);
-    ofs.write(reinterpret_cast<const char*>(&byteRate), 4);
-    uint16_t blockAlign = channels * 2;
-    ofs.write(reinterpret_cast<const char*>(&blockAlign), 2);
-    uint16_t bitsPerSample = 16;
-    ofs.write(reinterpret_cast<const char*>(&bitsPerSample), 2);
-    ofs.write("data", 4);
-    ofs.write(reinterpret_cast<const char*>(&dataSize), 4);
+#include "dsp_wrapper.h" // 你刚换好的“增益+3段EQ+混响+限幅”版本
+#include "wav_writer.h"  // 前面我给你的 32-bit float WAV 写入器
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
+using clock_type = std::chrono::high_resolution_clock;
+struct Timing
+{
+    uint64_t blocks = 0;
+    uint64_t total_us = 0;
+    uint64_t max_us = 0;
+};
+
+// 生成对数扫频（便于看 EQ/频响）：50Hz → 18kHz
+static void gen_log_sweep(std::vector<float> &interleaved,
+                          uint32_t sampleRate, uint16_t channels,
+                          float seconds, float startHz = 50.0f, float endHz = 18000.0f, float gain = 0.5f)
+{
+    const uint32_t frames = static_cast<uint32_t>(seconds * sampleRate);
+    interleaved.assign(frames * channels, 0.0f);
+
+    const double T = seconds;
+    const double f1 = startHz, f2 = endHz;
+    const double K = T / std::log(f2 / f1);
+
+    double t = 0.0;
+    for (uint32_t n = 0; n < frames; ++n)
+    {
+        const double phi = 2.0 * M_PI * f1 * K * (std::exp(t / K) - 1.0);
+        const float v = static_cast<float>(std::sin(phi)) * gain; // 约 -6 dBFS 余量
+        for (uint16_t ch = 0; ch < channels; ++ch)
+        {
+            interleaved[n * channels + ch] = v;
+        }
+        t += 1.0 / sampleRate;
+    }
 }
 
-// clamp float [-1,1] to int16
-static inline int16_t f_to_i16(float v) {
-    if (v > 1.0f) v = 1.0f;
-    if (v < -1.0f) v = -1.0f;
-    return static_cast<int16_t>(v * 32767.0f);
+// 分块处理（支持 in-place），并统计每块处理耗时（微秒）
+static void process_blocked(void *ctx,
+                            float *inout,       // 当 inPlace=true 时：输入输出同一缓冲区
+                            float *outSeparate, // 当 inPlace=false 时：输出缓冲区
+                            uint32_t frames,
+                            uint32_t sampleRate,
+                            uint16_t channels,
+                            uint32_t blockFrames,
+                            bool inPlace,
+                            Timing &timing)
+{
+    (void)sampleRate; // 这里不用，但保留以便你扩展
+    timing = {};
+
+    if (inPlace)
+    {
+        // 直接就地处理同一块（每次传递一个连续窗口）
+        uint32_t done = 0;
+        while (done < frames)
+        {
+            uint32_t todo = std::min(blockFrames, frames - done);
+            auto *ptr = inout + done * channels;
+
+            auto t0 = clock_type::now();
+            dsp_process_block(ctx, ptr, ptr, todo, channels);
+            auto t1 = clock_type::now();
+
+            uint64_t us = std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
+            timing.blocks++;
+            timing.total_us += us;
+            timing.max_us = std::max(timing.max_us, us);
+
+            done += todo;
+        }
+    }
+    else
+    {
+        // 用独立的 in/out 小块缓冲
+        std::vector<float> inBlk(blockFrames * channels);
+        std::vector<float> outBlk(blockFrames * channels);
+
+        uint32_t done = 0;
+        while (done < frames)
+        {
+            uint32_t todo = std::min(blockFrames, frames - done);
+            const float *src = inout + done * channels;
+            std::copy_n(src, todo * channels, inBlk.data());
+
+            auto t0 = clock_type::now();
+            dsp_process_block(ctx, inBlk.data(), outBlk.data(), todo, channels);
+            auto t1 = clock_type::now();
+
+            std::copy_n(outBlk.data(), todo * channels, outSeparate + done * channels);
+
+            uint64_t us = std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
+            timing.blocks++;
+            timing.total_us += us;
+            timing.max_us = std::max(timing.max_us, us);
+
+            done += todo;
+        }
+    }
 }
 
-int main() {
-    const uint32_t sampleRate = 48000;
-    const uint32_t channels = 2;
-    const float freq = 440.0f; // test tone A4
-    const float durationSec = 5.0f;
-    const uint32_t totalFrames = static_cast<uint32_t>(sampleRate * durationSec);
-    const uint32_t blockFrames = 256;
+// 打印计时结果
+static void print_timing(const char *name, const Timing &t, uint32_t blockFrames)
+{
+    const double avg = t.blocks ? (double)t.total_us / (double)t.blocks : 0.0;
+    std::cout << "[TIMING] " << name
+              << " | blocks=" << t.blocks
+              << " | block=" << blockFrames << " frames"
+              << " | avg=" << avg << " us/blk"
+              << " | max=" << t.max_us << " us\n";
+}
 
-    // create dsp context
-    void* ctx = dsp_create_context(sampleRate, channels);
-    if (!ctx) {
-        std::cerr << "dsp_create_context failed\n";
+int main()
+{
+    // ---- 全局基础：Win11 典型音频流格式 ----
+    const uint32_t SR48k = 48000;
+    const uint32_t SR441k = 44100; // 备用测试
+    const uint16_t CH_ST = 2;
+    const float DURATION = 8.0f; // 8 秒扫频
+    // 1) 生成 48k/立体声/float 的输入扫频，并写入 in_float.wav
+    std::vector<float> in48;
+    gen_log_sweep(in48, SR48k, CH_ST, DURATION, 50.0f, 18000.0f, 0.5f);
+    if (!write_wav_float32("in_float.wav", in48, SR48k, CH_ST))
+    {
+        std::cerr << "写入 in_float.wav 失败\n";
         return -1;
     }
-    // optional: tweak gain for clear audible effect
-    // assuming context layout as in dsp_wrapper.c:
-    typedef struct { float gain; unsigned sr; unsigned ch; } _CTX;
-    _CTX* c = (_CTX*)ctx;
-    c->gain = 1.5f; // +50% amplitude (测试用，注意音量)
+    std::cout << "生成 in_float.wav (48k/stereo/float)\n";
 
-    std::vector<int16_t> outSamples(totalFrames * channels);
-    std::vector<float> inBlock(blockFrames * channels);
-    std::vector<float> outBlock(blockFrames * channels);
+    // 为各用例准备通用变量
+    Timing tim;
+    const uint32_t BLOCK_10MS = 480; // 10ms @48k
+    const uint32_t BLOCK_128 = 128;  // 小块测试
+    const uint32_t frames48 = static_cast<uint32_t>(in48.size() / CH_ST);
 
-    double phase = 0.0;
-    double phaseInc = 2.0 * M_PI * freq / sampleRate;
-
-    uint32_t framesDone = 0;
-    while (framesDone < totalFrames) {
-        uint32_t toDo = std::min<uint32_t>(blockFrames, totalFrames - framesDone);
-        // generate interleaved stereo sine
-        for (uint32_t f = 0; f < toDo; ++f) {
-            float v = static_cast<float>(sin(phase));
-            phase += phaseInc;
-            if (phase > 2.0*M_PI) phase -= 2.0*M_PI;
-            for (uint32_t ch = 0; ch < channels; ++ch) {
-                inBlock[f*channels + ch] = v;
-            }
+    // -------------------------
+    // 用例 A：空处理（Null Test）
+    // 目标：验证“直通”—— out 应 ≈ in
+    // -------------------------
+    {
+        std::vector<float> out(in48.size());
+        void *ctx = dsp_create_context(SR48k, CH_ST);
+        if (!ctx)
+        {
+            std::cerr << "ctx fail\n";
+            return -2;
         }
 
-        // process block
-        dsp_process_block(ctx, inBlock.data(), outBlock.data(), toDo, channels);
+        dsp_set_gain(ctx, 1.0f);
+        dsp_set_eq_enabled(ctx, 0, 0);
+        dsp_set_eq_enabled(ctx, 1, 0);
+        dsp_set_eq_enabled(ctx, 2, 0);
+        dsp_set_reverb_enabled(ctx, 0);
+        dsp_set_limiter_enabled(ctx, 0);
 
-        // convert to int16 and store
-        for (uint32_t f = 0; f < toDo; ++f) {
-            for (uint32_t ch = 0; ch < channels; ++ch) {
-                float vf = outBlock[f*channels + ch];
-                outSamples[(framesDone + f) * channels + ch] = f_to_i16(vf);
-            }
-        }
-
-        framesDone += toDo;
+        process_blocked(ctx, in48.data(), out.data(), frames48, SR48k, CH_ST, BLOCK_10MS, /*inPlace=*/false, tim);
+        dsp_destroy_context(ctx);
+        write_wav_float32("out_null.wav", out, SR48k, CH_ST);
+        print_timing("null", tim, BLOCK_10MS);
     }
 
-    // write wav
-    std::ofstream ofs("out_test.wav", std::ios::binary);
-    write_wav_header(ofs, sampleRate, channels, totalFrames);
-    ofs.write(reinterpret_cast<const char*>(outSamples.data()), outSamples.size() * sizeof(int16_t));
-    ofs.close();
+    // -------------------------
+    // 用例 B：增益线性（+3.52 dB）
+    // -------------------------
+    {
+        std::vector<float> out(in48.size());
+        void *ctx = dsp_create_context(SR48k, CH_ST);
+        dsp_set_gain(ctx, 1.5f);
+        dsp_set_eq_enabled(ctx, 0, 0);
+        dsp_set_eq_enabled(ctx, 1, 0);
+        dsp_set_eq_enabled(ctx, 2, 0);
+        dsp_set_reverb_enabled(ctx, 0);
+        dsp_set_limiter_enabled(ctx, 0); // 为了对比“纯增益”，先关限幅
 
-    dsp_destroy_context(ctx);
+        process_blocked(ctx, in48.data(), out.data(), frames48, SR48k, CH_ST, BLOCK_10MS, false, tim);
+        dsp_destroy_context(ctx);
+        write_wav_float32("out_gain.wav", out, SR48k, CH_ST);
+        print_timing("gain", tim, BLOCK_10MS);
+    }
 
-    std::cout << "WAV written: out_test.wav\n";
+    // -------------------------
+    // 用例 C：3 段 EQ（低/峰/高）
+    // -------------------------
+    {
+        std::vector<float> out(in48.size());
+        void *ctx = dsp_create_context(SR48k, CH_ST);
+        dsp_set_gain(ctx, 1.0f);
+        dsp_set_eq_enabled(ctx, 0, 1);
+        dsp_set_eq_params(ctx, 0, 120.f, 0.707f, +6.f);
+        dsp_set_eq_enabled(ctx, 1, 1);
+        dsp_set_eq_params(ctx, 1, 1200.f, 1.2f, -6.f);
+        dsp_set_eq_enabled(ctx, 2, 1);
+        dsp_set_eq_params(ctx, 2, 8000.f, 0.707f, +6.f);
+        dsp_set_reverb_enabled(ctx, 0);
+        dsp_set_limiter_enabled(ctx, 1); // 避免 EQ 抬升导致削顶
+
+        process_blocked(ctx, in48.data(), out.data(), frames48, SR48k, CH_ST, BLOCK_10MS, false, tim);
+        dsp_destroy_context(ctx);
+        write_wav_float32("out_eq.wav", out, SR48k, CH_ST);
+        print_timing("eq", tim, BLOCK_10MS);
+    }
+
+    // -------------------------
+    // 用例 D：混响（Schroeder）
+    // -------------------------
+    {
+        std::vector<float> out(in48.size());
+        void *ctx = dsp_create_context(SR48k, CH_ST);
+        dsp_set_gain(ctx, 1.0f);
+        dsp_set_reverb_enabled(ctx, 1);
+        dsp_set_reverb_params(ctx, 0.25f, 0.7f, 0.3f, 20.f); // 湿比/房间/阻尼/预延迟
+        dsp_set_eq_enabled(ctx, 0, 0);
+        dsp_set_eq_enabled(ctx, 1, 0);
+        dsp_set_eq_enabled(ctx, 2, 0);
+        dsp_set_limiter_enabled(ctx, 1);
+
+        process_blocked(ctx, in48.data(), out.data(), frames48, SR48k, CH_ST, BLOCK_10MS, false, tim);
+        dsp_destroy_context(ctx);
+        write_wav_float32("out_reverb.wav", out, SR48k, CH_ST);
+        print_timing("reverb", tim, BLOCK_10MS);
+    }
+
+    // -------------------------
+    // 用例 E：限幅（比较 on/off）
+    // -------------------------
+    {
+        // off
+        {
+            std::vector<float> out(in48.size());
+            void *ctx = dsp_create_context(SR48k, CH_ST);
+            dsp_set_gain(ctx, 2.0f); // 有意拉大，利于观察削顶
+            dsp_set_limiter_enabled(ctx, 0);
+            dsp_set_eq_enabled(ctx, 0, 0);
+            dsp_set_eq_enabled(ctx, 1, 0);
+            dsp_set_eq_enabled(ctx, 2, 0);
+            dsp_set_reverb_enabled(ctx, 0);
+
+            process_blocked(ctx, in48.data(), out.data(), frames48, SR48k, CH_ST, BLOCK_10MS, false, tim);
+            dsp_destroy_context(ctx);
+            write_wav_float32("out_limiter_off.wav", out, SR48k, CH_ST);
+            print_timing("limiter_off", tim, BLOCK_10MS);
+        }
+        // on
+        {
+            std::vector<float> out(in48.size());
+            void *ctx = dsp_create_context(SR48k, CH_ST);
+            dsp_set_gain(ctx, 2.0f);
+            dsp_set_limiter_enabled(ctx, 1);
+            dsp_set_eq_enabled(ctx, 0, 0);
+            dsp_set_eq_enabled(ctx, 1, 0);
+            dsp_set_eq_enabled(ctx, 2, 0);
+            dsp_set_reverb_enabled(ctx, 0);
+
+            process_blocked(ctx, in48.data(), out.data(), frames48, SR48k, CH_ST, BLOCK_10MS, false, tim);
+            dsp_destroy_context(ctx);
+            write_wav_float32("out_limiter_on.wav", out, SR48k, CH_ST);
+            print_timing("limiter_on", tim, BLOCK_10MS);
+        }
+    }
+
+    // -------------------------
+    // 用例 F：块大小 128 帧（稳定性）
+    // -------------------------
+    {
+        std::vector<float> out(in48.size());
+        void *ctx = dsp_create_context(SR48k, CH_ST);
+        dsp_set_gain(ctx, 1.2f);
+        dsp_set_eq_enabled(ctx, 1, 1);
+        dsp_set_eq_params(ctx, 1, 1500.f, 1.0f, +3.f);
+        dsp_set_limiter_enabled(ctx, 1);
+
+        process_blocked(ctx, in48.data(), out.data(), frames48, SR48k, CH_ST, BLOCK_128, false, tim);
+        dsp_destroy_context(ctx);
+        write_wav_float32("out_block128.wav", out, SR48k, CH_ST);
+        print_timing("block128", tim, BLOCK_128);
+    }
+
+    // -------------------------
+    // 用例 G：就地处理 in-place（验证 in==out 是否安全）
+    // -------------------------
+    {
+        std::vector<float> inout = in48; // 复制一份用作 in-place 处理
+        void *ctx = dsp_create_context(SR48k, CH_ST);
+        dsp_set_gain(ctx, 1.1f);
+        dsp_set_eq_enabled(ctx, 2, 1);
+        dsp_set_eq_params(ctx, 2, 9000.f, 0.707f, +4.f);
+        dsp_set_limiter_enabled(ctx, 1);
+
+        process_blocked(ctx, inout.data(), /*outSeparate*/ nullptr, frames48, SR48k, CH_ST, BLOCK_10MS, true, tim);
+        dsp_destroy_context(ctx);
+        write_wav_float32("out_inplace.wav", inout, SR48k, CH_ST);
+        print_timing("inplace", tim, BLOCK_10MS);
+    }
+
+    // -------------------------
+    // 用例 H：采样率 44.1k（重生输入并处理）
+    // -------------------------
+    {
+        std::vector<float> in441;
+        gen_log_sweep(in441, SR441k, CH_ST, DURATION, 50.0f, 18000.0f, 0.5f);
+        write_wav_float32("in_44100_float.wav", in441, SR441k, CH_ST);
+
+        const uint32_t frames441 = static_cast<uint32_t>(in441.size() / CH_ST);
+        std::vector<float> out(in441.size());
+
+        void *ctx = dsp_create_context(SR441k, CH_ST);
+        dsp_set_gain(ctx, 1.3f);
+        dsp_set_eq_enabled(ctx, 0, 1);
+        dsp_set_eq_params(ctx, 0, 100.f, 0.707f, +3.f);
+        dsp_set_eq_enabled(ctx, 1, 1);
+        dsp_set_eq_params(ctx, 1, 1200.f, 1.0f, -3.f);
+        dsp_set_limiter_enabled(ctx, 1);
+
+        const uint32_t BLOCK_10MS_441 = 441; // 约 10ms @44.1k
+        process_blocked(ctx, in441.data(), out.data(), frames441, SR441k, CH_ST, BLOCK_10MS_441, false, tim);
+        dsp_destroy_context(ctx);
+        write_wav_float32("out_sr44100.wav", out, SR441k, CH_ST);
+        print_timing("sr44100", tim, BLOCK_10MS_441);
+    }
+
+    std::cout << "\n已生成这些文件（当前工作目录）:\n"
+              << "  in_float.wav, in_44100_float.wav(可选)\n"
+              << "  out_null.wav, out_gain.wav, out_eq.wav, out_reverb.wav,\n"
+              << "  out_limiter_off.wav, out_limiter_on.wav,\n"
+              << "  out_block128.wav, out_inplace.wav, out_sr44100.wav\n\n"
+              << "建议打开 Audacity:\n"
+              << "  1) 同时导入 in_float.wav 与各 out_*.wav，比对波形振幅、频谱(分析→绘制频谱)。\n"
+              << "  2) Null Test: 把 out_null 反相后与 in_float 混音，应接近静音。\n"
+              << "  3) 限幅 on/off：观察波峰“圆角” vs “削顶”。\n"
+              << "  4) reverb：观察尾音拉长与 ~20ms 预延迟。\n"
+              << "  5) 通过上面 [TIMING] 行查看各用例的平均/最大耗时（μs/块）。\n";
     return 0;
 }
