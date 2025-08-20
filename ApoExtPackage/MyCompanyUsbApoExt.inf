@@ -1,71 +1,75 @@
 ; ====================== MyCompanyUsbApoExt.inf ======================
-; 作用：把 MyCompanyEfxApo.dll 作为 EFX APO 绑定到指定 USB 音频设备。
-; 关键点：
-;   - Class=Extension，不替换原驱动，只追加配置。
-;   - 精确匹配 USB\VID_0A67&PID_30A2&MI_00 设备实例。
-;   - CopyFiles 拷 DLL 到 System32；AddReg 完成 FX 绑定 + COM CLSID 注册。
-;   - EFX=1：即使应用以“RAW 模式”打开设备也会执行该 APO。
-; ===================================================================
+; 目的：把 MyCompanyEfxApo.dll 作为端点级 EFX 绑定到 USB\VID_0A67&PID_30A2&MI_00
 
 [Version]
 Signature   = "$Windows NT$"
 Class       = Extension
-ClassGuid   = {e2f84ce7-8efa-411c-aa69-97454ca4cb57}    ; 扩展 INF 固定类
+ClassGuid   = {e2f84ce7-8efa-411c-aa69-97454ca4cb57}
 Provider    = %Mfg%
-DriverVer   = 08/19/2025,15.19.40.92
-ExtensionId = {E6F0C0C8-2A0D-4B5D-9B6E-6B3D7B2C9D11}    ; 你自定的扩展包 ID
+DriverVer   = 08/20/2025,1.0.0.3
+ExtensionId = {E6F0C0C8-2A0D-4B5D-9B6E-6B3D7B2C9D11}
 CatalogFile = MyCompanyUsbApoExt.cat
+
+; 可有可无；保留无害
+Include     = ks.inf, wdmaudio.inf
+Needs       = KS.Registration, WDMAUDIO.Registration
 
 [Manufacturer]
 %Mfg% = Models,NTamd64
 
-; 仅 x64
 [Models.NTamd64]
 %UsbDesc% = ApoExt.Install.NTamd64, USB\VID_0A67&PID_30A2&MI_00
 
-; ---------------- 安装节：拷 DLL + 注册表（FX 绑定 & COM） ----------------
+; ---------------- 安装主节：拷 DLL + 写注册表（PKEY + 旧式 FX + COM） ----------------
 [ApoExt.Install.NTamd64]
 CopyFiles = Apo.Copy
-AddReg    = Apo.Fx.Reg, Apo.Reg.Classes
+AddReg    = Apo.FxPKEY.AddReg, Apo.FxLegacy.AddReg, Apo.ComHKLM.AddReg
 
-; %11% = System32
 [DestinationDirs]
-Apo.Copy = 11
+Apo.Copy = 11       ; %SystemRoot%\System32
 
-; 分发介质中的二进制（被 CopyFiles 用）
 [Apo.Copy]
 MyCompanyEfxApo.dll
 
-; 设备实例下的 FX 绑定（HKR = 此设备实例的 ...\Device Parameters）
-; FX\{ApoClsid}\Dll        = DLL 文件名（System32 下）
-; FX\{ApoClsid}\EFX (dword)= 1 => 作为 EFX 参与（RAW 模式也执行）
-; FX\{ApoClsid}\FriendlyName= 友好名
-; FX\{ApoClsid}\Order(dword)= 执行顺序（多 APO 时，数字小者先执行）
-[Apo.Fx.Reg]
-HKR,"FX\%ApoClsid%","Dll",0x0,"MyCompanyEfxApo.dll"
-HKR,"FX\%ApoClsid%","EFX",0x00010001,1
-HKR,"FX\%ApoClsid%","FriendlyName",0x0,"%UsbDesc%"
-HKR,"FX\%ApoClsid%","Order",0x00010001,100
+; ================== 新式 PKEY 绑定（写到：Device Parameters\FX\0） ==================
+[Apo.FxPKEY.AddReg]
+; ★ 关键：端点级 EFX CLSID
+HKR,"FX\0","{D04E05A6-594B-4FB6-A80D-01AF5EED7D1D},7",0x00000000,%ApoClsid%
 
-; COM/CLSID 注册（InprocServer32 指向 System32 中的 DLL）
-[Apo.Reg.Classes]
-HKCR,"CLSID\%ApoClsid%",,0x0,"%UsbDesc%"
-HKCR,"CLSID\%ApoClsid%\InprocServer32",,0x0,"%11%\MyCompanyEfxApo.dll"
-HKCR,"CLSID\%ApoClsid%\InprocServer32","ThreadingModel",0x0,"Both"
+; 建议：确保未禁用系统增强（0 = 启用增强）
+HKR,"FX\0","{1DA5D803-D492-4EDD-8C23-E0C0FFEE7F0E},5",0x00010001,0
 
-; ---------------- 分发介质（供 inf2cat 解析） ----------------
-; 第4列留空 => 在 /driver 指定的“分发根目录”查找
+; （可选）若需声明支持的处理模式，可再加一行 REG_MULTI_SZ（先省略，避免键名不一致引发失败）
+;HKR,"FX\0","{D04E05A6-594B-4FB6-A80D-01AF5EED7D1D},17",0x00010000,"%AUDIO_SIGNALPROCESSINGMODE_DEFAULT%"
+
+; ================== 旧式 FX\{CLSID} 绑定（写到：Device Parameters\FX\{CLSID}） ==================
+[Apo.FxLegacy.AddReg]
+HKR,FX\%ApoClsidStr%,Dll,  0x00000000,"MyCompanyEfxApo.dll"
+HKR,FX\%ApoClsidStr%,EFX,  0x00010001,1
+HKR,FX\%ApoClsidStr%,Order,0x00010001,100
+
+; ================== 正确的 COM/CLSID 注册（写到 HKLM\SOFTWARE\Classes\CLSID） ==================
+[Apo.ComHKLM.AddReg]
+HKLM,SOFTWARE\Classes\CLSID\%ApoClsid%,,0x00000000,"%UsbDesc%"
+HKLM,SOFTWARE\Classes\CLSID\%ApoClsid%\InProcServer32,,0x00000000,"%11%\MyCompanyEfxApo.dll"
+HKLM,SOFTWARE\Classes\CLSID\%ApoClsid%\InProcServer32,ThreadingModel,0x00000000,"Both"
+
+; ---------------- 分发介质 ----------------
 [SourceDisksNames]
 1 = %DiskName%,,,
 
 [SourceDisksFiles]
 MyCompanyEfxApo.dll = 1
 
-; ---------------- 字符串 ----------------
+; ---------------- 字符串常量 ----------------
 [Strings]
 Mfg       = "MyCompany"
 UsbDesc   = "MyCompany USB Audio EFX APO"
 DiskName  = "MyCompany APO Package"
-; 你的 APO CLSID（与代码中的 CLSID_MyCompanyEfxApo 一致）
-ApoClsid  = "{8E3E0B71-5B8A-45C9-9B3D-3A2E5B418A10}"
-; ===================================================================
+
+; 你的 APO CLSID（与 DLL 内一致）
+ApoClsid    = "{8E3E0B71-5B8A-45C9-9B3D-3A2E5B418A10}"
+ApoClsidStr = "{8E3E0B71-5B8A-45C9-9B3D-3A2E5B418A10}"
+
+; 处理模式（如要启用上一节被注释的行）
+AUDIO_SIGNALPROCESSINGMODE_DEFAULT = "{C18E2F7E-933D-4965-B7D1-1EEF228D2AF3}"

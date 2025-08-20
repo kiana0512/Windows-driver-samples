@@ -1,117 +1,184 @@
-// EfxApo.cpp（关键片段）
+// EfxApo.cpp  —— 最小可编译/可实例化骨架（与 EfxApo.h 对齐，旧 SDK 签名）
 #include "EfxApo.h"
-#include <functiondiscoverykeys_devpkey.h>
-#include <propvarutil.h>
-#include <vector>
+#include <audioclient.h>
+#include <mmreg.h>
+#include <new>          // std::nothrow
+#include <cstring>      // memcpy
 
-// === 工具：把 blob/简单值写入 pending，再 bump seq ===
-static void CopyParams(MyDspParams& dst, const MyDspParams& src) { memcpy(&dst,&src,sizeof(dst)); }
-void CMyCompanyEfxApo::ApplyParams_NoLock(const MyDspParams& p) {
-    // 1) 落到 dsp_wrapper
-    dsp_set_gain(m_dspCtx, p.gain);
-    for (int i=0;i<MY_EQ_BANDS;i++) {
-        auto& b = p.eq[i];
-        int bandType = b.type; // 0/1/2：你可在 dsp_wrapper 里做分派
-        dsp_set_eq_enabled(m_dspCtx, i, b.enabled);
-        dsp_set_eq_params (m_dspCtx, i, b.freq, b.q, b.gain_db);
-    }
-    if (p.reverb.enabled) {
-        dsp_set_reverb_enabled(m_dspCtx, 1);
-        dsp_set_reverb_params (m_dspCtx, p.reverb.wet, p.reverb.room, p.reverb.damp, p.reverb.pre_ms);
-    } else {
-        dsp_set_reverb_enabled(m_dspCtx, 0);
-    }
-    dsp_set_limiter_enabled(m_dspCtx, p.limiterEnabled);
+// 某些环境未定义默认处理模式 GUID，兜底定义
+#ifndef INITGUID
+#define INITGUID
+#endif
+#ifndef AUDIO_SIGNALPROCESSINGMODE_DEFAULT
+// {C18E2F7E-933D-4965-B7D1-1EEF228D2AF3}
+DEFINE_GUID(AUDIO_SIGNALPROCESSINGMODE_DEFAULT,
+            0xC18E2F7E,0x933D,0x4965,0xB7,0xD1,0x1E,0xEF,0x22,0x8D,0x2A,0xF3);
+#endif
 
-    // 2) 预留：如果有 opcode，就交给你的解释器/JIT
-    // if (p.opcodeSize > 0) MyOpcodeExec::Load(p.opcode, p.opcodeSize);
+// ====== 构造 / 析构 ======
+CMyCompanyEfxApo::CMyCompanyEfxApo() {}
+CMyCompanyEfxApo::~CMyCompanyEfxApo() {
+    if (m_hStopEvt)    { SetEvent(m_hStopEvt); }
+    if (m_hPipeThread) { WaitForSingleObject(m_hPipeThread, 2000); CloseHandle(m_hPipeThread); }
+    if (m_hStopEvt)    { CloseHandle(m_hStopEvt); m_hStopEvt = nullptr; }
+    // TODO: if (m_dspCtx) { /* dsp_destroy(m_dspCtx); */ m_dspCtx = nullptr; }
 }
 
-// === Initialize：保存采样率/通道、创建 ctx、启动管道线程 ===
-STDMETHODIMP CMyCompanyEfxApo::Initialize(APOInit* pAPOInit) {
-    // ……你的原有初始化……
-    // 取当前格式（示例：48k/2ch；真实从 conn props / APOInitSystemEffects2 获取）
-    m_sr = 48000; m_ch = 2;
-    m_dspCtx = dsp_create_context(m_sr, m_ch);
+// ====================== IUnknown ======================
+STDMETHODIMP CMyCompanyEfxApo::QueryInterface(REFIID riid, void** ppv) {
+    if (!ppv) return E_POINTER;
+    *ppv = nullptr;
 
-    // 默认参数
-    ZeroMemory(&m_paramsActive, sizeof(m_paramsActive));
-    m_paramsActive.gain = 1.0f;
-    m_paramsActive.limiterEnabled = 1;
-    CopyParams(m_paramsPending, m_paramsActive);
+    if (riid == __uuidof(IUnknown)) {
+        // 多继承下到 IUnknown 的二义性：选一个父接口子对象返回
+        *ppv = static_cast<IAudioProcessingObject*>(this);
+    }
+    else if (riid == __uuidof(IAudioProcessingObject))   *ppv = static_cast<IAudioProcessingObject*>(this);
+    else if (riid == __uuidof(IAudioProcessingObjectRT)) *ppv = static_cast<IAudioProcessingObjectRT*>(this);
+    else if (riid == __uuidof(IAudioSystemEffects))      *ppv = static_cast<IAudioSystemEffects*>(this);
+    else if (riid == __uuidof(IPropertyStore))           *ppv = static_cast<IPropertyStore*>(this);
+    else return E_NOINTERFACE;
 
-    // 启动命名管道监听（方案C预留：立即生效通道）
-    m_hStopEvt = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    AddRef();
+    return S_OK;
+}
+ULONG STDMETHODCALLTYPE CMyCompanyEfxApo::AddRef()  { return ++m_ref; }
+ULONG STDMETHODCALLTYPE CMyCompanyEfxApo::Release() { ULONG n = --m_ref; if (!n) delete this; return n; }
+
+// ============= IAudioProcessingObject（最小实现） =============
+STDMETHODIMP CMyCompanyEfxApo::Initialize(UINT32 cbDataSize, BYTE* pbyData) {
+    // 你的 SDK 是旧签名：Initialize(cbDataSize, pbyData)
+    UNREFERENCED_PARAMETER(cbDataSize);
+    UNREFERENCED_PARAMETER(pbyData);
+
+    // TODO: 解析 pbyData（若使用 APOINIT_SYSTEMEFFECTS 等）
+    m_sr = 48000; 
+    m_ch = 2;
+    // m_dspCtx = dsp_create_context(m_sr, m_ch);
+
+    ZeroMemory(&m_paramsActive,  sizeof(m_paramsActive));
+    ZeroMemory(&m_paramsPending, sizeof(m_paramsPending));
+
+    m_hStopEvt    = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     m_hPipeThread = CreateThread(nullptr, 0, &CMyCompanyEfxApo::PipeThreadMain, this, 0, nullptr);
     return S_OK;
 }
 
-// === 实时处理：检查参数是否更新，然后处理 ===
-// 新（注意返回类型 void、参数是双重指针 **）：
-STDMETHODIMP_(void) CMyCompanyEfxApo::APOProcess(
-    UINT32 inC, APO_CONNECTION_PROPERTY** inP,
-    UINT32 outC, APO_CONNECTION_PROPERTY** outP)
+STDMETHODIMP CMyCompanyEfxApo::LockForProcess(
+    UINT32 inCount,  _In_reads_(inCount)  APO_CONNECTION_DESCRIPTOR** inDesc,
+    UINT32 outCount, _In_reads_(outCount) APO_CONNECTION_DESCRIPTOR** outDesc)
 {
-    if (inC && outC && inP && outP && inP[0] && outP[0]) {
-        float* in  = (float*)inP[0]->pBuffer;
-        float* out = (float*)outP[0]->pBuffer;
-        UINT32 frames = outP[0]->u32ValidFrameCount;
-        dsp_process_block(m_dspCtx, in, out, frames, m_ch);
+    // 最小实现：从第一个输出连接的格式推导采样率/通道
+    if (outCount && outDesc && outDesc[0] && outDesc[0]->pFormat) {
+        IAudioMediaType* pType = outDesc[0]->pFormat;
+        auto pWfx = reinterpret_cast<const WAVEFORMATEX*>(pType->GetAudioFormat());
+        if (pWfx) { m_sr = pWfx->nSamplesPerSec; m_ch = pWfx->nChannels; }
     }
+    UNREFERENCED_PARAMETER(inCount);
+    UNREFERENCED_PARAMETER(inDesc);
+    return S_OK;
 }
 
-// === IPropertyStore：应用通过 IMMDevice→IPropertyStore→SetValue 写到我们 ===
-STDMETHODIMP CMyCompanyEfxApo::SetValue(REFPROPERTYKEY key, REFPROPVARIANT pv) {
-    if (IsEqualPropertyKey(key, PKEY_MyCompany_ParamsBlob)) {
-        if (pv.vt != VT_BLOB || pv.blob.cbSize != sizeof(MyDspParams)) return E_INVALIDARG;
-        const MyDspParams* p = (const MyDspParams*)pv.blob.pBlobData;
-        CopyParams(m_paramsPending, *p);
-        InterlockedIncrement(&m_paramsSeq); // 通知处理线程
-        return S_OK;
-    }
-    if (IsEqualPropertyKey(key, PKEY_MyCompany_Gain)) {
-        if (pv.vt == VT_R4 || pv.vt == VT_R8) {
-            m_paramsPending.gain = (pv.vt==VT_R4) ? pv.fltVal : (float)pv.dblVal;
-            InterlockedIncrement(&m_paramsSeq);
-            return S_OK;
-        }
-        return E_INVALIDARG;
-    }
-    // 其他 key（EQ/Reverb/Limiter）同理：解析 BLOB 或标量，写 m_paramsPending + bump seq
+STDMETHODIMP CMyCompanyEfxApo::UnlockForProcess() { return S_OK; }
+
+STDMETHODIMP CMyCompanyEfxApo::GetLatency(_Out_ HNSTIME* pLatency) {
+    if (!pLatency) return E_POINTER; 
+    *pLatency = 0; 
+    return S_OK;
+}
+STDMETHODIMP CMyCompanyEfxApo::Reset() { return S_OK; }
+
+STDMETHODIMP CMyCompanyEfxApo::GetRegistrationProperties(
+    _Outptr_result_maybenull_ APO_REG_PROPERTIES** ppRegProps)
+{
+    if (ppRegProps) *ppRegProps = nullptr;   // 后续需要再返回真正属性
     return E_NOTIMPL;
 }
 
-STDMETHODIMP CMyCompanyEfxApo::GetCount(DWORD* c){ if(!c) return E_POINTER; *c=1; return S_OK; }
-STDMETHODIMP CMyCompanyEfxApo::GetAt(DWORD i, PROPERTYKEY* k){ if(!k) return E_POINTER; if(i) return E_BOUNDS; *k=PKEY_MyCompany_ParamsBlob; return S_OK; }
-STDMETHODIMP CMyCompanyEfxApo::GetValue(REFPROPERTYKEY key, PROPVARIANT* pv){ return E_NOTIMPL; }
-STDMETHODIMP CMyCompanyEfxApo::Commit(){ return S_OK; }
+STDMETHODIMP CMyCompanyEfxApo::IsInputFormatSupported(
+    _In_opt_ IAudioMediaType* /*pOutputFormat*/,
+    _In_     IAudioMediaType* /*pRequestedInputFormat*/,
+    _Outptr_ IAudioMediaType** ppSupportedInputFormat)
+{
+    if (ppSupportedInputFormat) *ppSupportedInputFormat = nullptr;
+    return E_NOTIMPL;
+}
 
-// === 方案C：后台线程，监听命名管道，收 MyDspParams 结构体 ===
-DWORD WINAPI CMyCompanyEfxApo::PipeThreadMain(LPVOID selfPtr) {
-    auto self = (CMyCompanyEfxApo*)selfPtr;
-    for (;;) {
-        HANDLE hPipe = CreateNamedPipeW(MYCOMPANY_PIPE_NAME,
-            PIPE_ACCESS_INBOUND, PIPE_TYPE_BYTE|PIPE_READMODE_BYTE|PIPE_WAIT,
-            1, 0, sizeof(MyDspParams), 0, nullptr);
-        if (hPipe == INVALID_HANDLE_VALUE) break;
+STDMETHODIMP CMyCompanyEfxApo::IsOutputFormatSupported(
+    _In_opt_ IAudioMediaType* /*pInputFormat*/,
+    _In_     IAudioMediaType* /*pRequestedOutputFormat*/,
+    _Outptr_ IAudioMediaType** ppSupportedOutputFormat)
+{
+    if (ppSupportedOutputFormat) *ppSupportedOutputFormat = nullptr;
+    return E_NOTIMPL;
+}
 
-        BOOL ok = ConnectNamedPipe(hPipe, nullptr) ? TRUE : (GetLastError() == ERROR_PIPE_CONNECTED);
-        if (!ok) { CloseHandle(hPipe); break; }
+STDMETHODIMP CMyCompanyEfxApo::GetInputChannelCount(_Out_ UINT32* pu32ChannelCount) {
+    if (!pu32ChannelCount) return E_POINTER; 
+    *pu32ChannelCount = m_ch; 
+    return S_OK;
+}
+STDMETHODIMP CMyCompanyEfxApo::GetOutputChannelCount(_Out_ UINT32* pu32ChannelCount) {
+    if (!pu32ChannelCount) return E_POINTER; 
+    *pu32ChannelCount = m_ch; 
+    return S_OK;
+}
 
-        MyDspParams p{};
-        DWORD got = 0;
-        while (ReadFile(hPipe, &p, sizeof(p), &got, nullptr)) {
-            if (got == sizeof(p)) {
-                CopyParams(self->m_paramsPending, p);
-                InterlockedIncrement(&self->m_paramsSeq);
-            }
-            got = 0;
-            if (WaitForSingleObject(self->m_hStopEvt, 0) == WAIT_OBJECT_0) break;
-        }
-        DisconnectNamedPipe(hPipe);
-        CloseHandle(hPipe);
+// ============= IAudioProcessingObjectRT（最小实现） =============
+STDMETHODIMP_(void) CMyCompanyEfxApo::APOProcess(
+    UINT32 inC,  _Inout_updates_(inC)  APO_CONNECTION_PROPERTY** inP,
+    UINT32 outC, _Inout_updates_(outC) APO_CONNECTION_PROPERTY** outP)
+{
+    UNREFERENCED_PARAMETER(inC);
+    UNREFERENCED_PARAMETER(inP);
+    UNREFERENCED_PARAMETER(outC);
+    UNREFERENCED_PARAMETER(outP);
+    // 最小实现：不改数据；后续把你的 DSP 放到这里
+}
 
-        if (WaitForSingleObject(self->m_hStopEvt, 0) == WAIT_OBJECT_0) break;
-    }
+// 你这版 SDK：Calc*Frames 只有一个参数，返回值就是帧数
+STDMETHODIMP_(UINT32) CMyCompanyEfxApo::CalcInputFrames(UINT32 u32OutputFrameCount) {
+    // 线性 1:1。如做变采样，这里返回对应输入帧数。
+    return u32OutputFrameCount;
+}
+STDMETHODIMP_(UINT32) CMyCompanyEfxApo::CalcOutputFrames(UINT32 u32InputFrameCount) {
+    return u32InputFrameCount;
+}
+
+// ================ IAudioSystemEffects（v1） ================
+STDMETHODIMP CMyCompanyEfxApo::GetEffectsList(
+    _Outptr_result_buffer_(*pcEffects) GUID** ppEffects,
+    _Out_ UINT* pcEffects,
+    _Outptr_result_maybenull_ LPWSTR** ppName)
+{
+    if (!ppEffects || !pcEffects) return E_POINTER;
+    *ppEffects = (GUID*)CoTaskMemAlloc(sizeof(GUID));
+    if (!*ppEffects) return E_OUTOFMEMORY;
+    **ppEffects = AUDIO_SIGNALPROCESSINGMODE_DEFAULT;
+    *pcEffects  = 1;
+    if (ppName) *ppName = nullptr;
+    return S_OK;
+}
+
+// ===================== IPropertyStore（最小） =====================
+STDMETHODIMP CMyCompanyEfxApo::GetCount(DWORD* cProps) {
+    if (!cProps) return E_POINTER; 
+    *cProps = 0; 
+    return S_OK;
+}
+STDMETHODIMP CMyCompanyEfxApo::GetAt(DWORD /*i*/, PROPERTYKEY* /*pkey*/) { return E_NOTIMPL; }
+STDMETHODIMP CMyCompanyEfxApo::GetValue(REFPROPERTYKEY /*key*/, PROPVARIANT* /*pv*/) { return E_NOTIMPL; }
+STDMETHODIMP CMyCompanyEfxApo::SetValue(REFPROPERTYKEY /*key*/, REFPROPVARIANT /*propvar*/) { return E_NOTIMPL; }
+STDMETHODIMP CMyCompanyEfxApo::Commit() { return S_OK; }
+
+// ======================= 内部辅助（占位） =======================
+DWORD WINAPI CMyCompanyEfxApo::PipeThreadMain(LPVOID self) {
+    auto p = static_cast<CMyCompanyEfxApo*>(self);
+    // TODO: 命名管道/共享内存等接收配置更新；收到后更新 m_paramsPending 并递增 m_paramsSeq
+    // 简化：直接等待停止事件
+    if (p && p->m_hStopEvt) WaitForSingleObject(p->m_hStopEvt, INFINITE);
     return 0;
+}
+void CMyCompanyEfxApo::ApplyParams_NoLock(const MyDspParams& /*p*/) {
+    // TODO: 把 pending 参数应用到 DSP；这里留空
 }
