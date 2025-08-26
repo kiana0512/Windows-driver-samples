@@ -1,0 +1,15 @@
+D:\MyCompanyEfxApo\app\obj\Debug\net9.0-windows\app.GeneratedMSBuildEditorConfig.editorconfig
+D:\MyCompanyEfxApo\app\obj\Debug\net9.0-windows\app.AssemblyInfoInputs.cache
+D:\MyCompanyEfxApo\app\obj\Debug\net9.0-windows\app.AssemblyInfo.cs
+D:\MyCompanyEfxApo\app\obj\Debug\net9.0-windows\app.csproj.CoreCompileInputs.cache
+D:\MyCompanyEfxApo\app\obj\Debug\net9.0-windows\app.sourcelink.json
+D:\MyCompanyEfxApo\app\bin\Debug\net9.0-windows\app.exe
+D:\MyCompanyEfxApo\app\bin\Debug\net9.0-windows\app.deps.json
+D:\MyCompanyEfxApo\app\bin\Debug\net9.0-windows\app.runtimeconfig.json
+D:\MyCompanyEfxApo\app\bin\Debug\net9.0-windows\app.dll
+D:\MyCompanyEfxApo\app\bin\Debug\net9.0-windows\app.pdb
+D:\MyCompanyEfxApo\app\obj\Debug\net9.0-windows\app.dll
+D:\MyCompanyEfxApo\app\obj\Debug\net9.0-windows\refint\app.dll
+D:\MyCompanyEfxApo\app\obj\Debug\net9.0-windows\app.pdb
+D:\MyCompanyEfxApo\app\obj\Debug\net9.0-windows\app.genruntimeconfig.cache
+D:\MyCompanyEfxApo\app\obj\Debug\net9.0-windows\ref\app.dll
