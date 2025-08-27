@@ -1,0 +1,2 @@
+D:\MyCompanyEfxApo\app\bin\Release\net9.0-windows\win-x64\publish\app.pdb
+D:\MyCompanyEfxApo\app\bin\Release\net9.0-windows\win-x64\publish\app.exe
