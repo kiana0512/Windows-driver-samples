@@ -1,0 +1,154 @@
+Microsoft PnP 工具
+
+实例 ID:                USB\VID_0A67&PID_30A2&MI_00\7&3b1ff4ef&0&0000
+设备描述:         USB Audio Device
+类名:                 MEDIA
+类 GUID:                 {4d36e96c-e325-11ce-bfc1-08002be10318}
+制造商名称:          (通用 USB 音频)
+状态:                     已启动
+驱动程序名称:                wdma_usb.inf
+属性:
+    DEVPKEY_Device_DeviceDesc [字符串]:
+        USB Audio Device
+    DEVPKEY_Device_HardwareIds [字符串列表]:
+        USB\VID_0A67&PID_30A2&REV_0001&MI_00
+        USB\VID_0A67&PID_30A2&MI_00
+    DEVPKEY_Device_CompatibleIds [字符串列表]:
+        USB\COMPAT_VID_0a67&Class_01&SubClass_01&Prot_00
+        USB\COMPAT_VID_0a67&Class_01&SubClass_01
+        USB\COMPAT_VID_0a67&Class_01
+        USB\Class_01&SubClass_01&Prot_00
+        USB\Class_01&SubClass_01
+        USB\Class_01
+    DEVPKEY_Device_Service [字符串]:
+        usbaudio
+    DEVPKEY_Device_Class [字符串]:
+        MEDIA
+    DEVPKEY_Device_ClassGuid [GUID]:
+        {4d36e96c-e325-11ce-bfc1-08002be10318}
+    DEVPKEY_Device_Driver [字符串]:
+        {4d36e96c-e325-11ce-bfc1-08002be10318}\0001
+    DEVPKEY_Device_ConfigFlags [UINT32]:
+        0x00000000 (0)
+    DEVPKEY_Device_Manufacturer [字符串]:
+        (通用 USB 音频)
+    DEVPKEY_Device_FriendlyName [字符串]:
+        USB Audio Device
+    DEVPKEY_Device_LocationInfo [字符串]:
+        000b.0000.0000.006.000.000.000.000.000
+    DEVPKEY_Device_PDOName [字符串]:
+        \Device\0000009b
+    DEVPKEY_Device_Capabilities [UINT32]:
+        0x000000A0 (160)
+    DEVPKEY_Device_BusTypeGuid [GUID]:
+        {9d7debbc-c85d-11d1-9eb4-006008c3a19a}
+    DEVPKEY_Device_LegacyBusType [UINT32]:
+        0x0000000F (15)
+    DEVPKEY_Device_BusNumber [UINT32]:
+        0x00000000 (0)
+    DEVPKEY_Device_EnumeratorName [字符串]:
+        USB
+    DEVPKEY_Device_Address [UINT32]:
+        0x00000006 (6)
+    DEVPKEY_Device_PowerData [二进制]:
+        38 00 00 00 01 00 00 00 99 00 00 00 00 00 00 00 
+        00 00 00 00 20 4E 00 00 00 00 00 00 01 00 00 00 
+        04 00 00 00 04 00 00 00 04 00 00 00 04 00 00 00 
+        04 00 00 00 04 00 00 00
+    DEVPKEY_Device_RemovalPolicy [UINT32]:
+        0x00000003 (3)
+    DEVPKEY_Device_RemovalPolicyDefault [UINT32]:
+        0x00000003 (3)
+    DEVPKEY_Device_InstallState [UINT32]:
+        0x00000000 (0)
+    DEVPKEY_Device_BaseContainerId [GUID]:
+        {16b5dc8e-d125-5b68-bfb3-10182a74f929}
+    DEVPKEY_NAME [字符串]:
+        USB Audio Device
+    DEVPKEY_Device_InstanceId [字符串]:
+        USB\VID_0A67&PID_30A2&MI_00\7&3b1ff4ef&0&0000
+    DEVPKEY_Device_DevNodeStatus [UINT32]:
+        0x0180200A (25174026)
+    DEVPKEY_Device_ProblemCode [UINT32]:
+        0x00000000 (0)
+    DEVPKEY_Device_BusRelations [字符串列表]:
+        SWD\MMDEVAPI\{0.0.1.00000000}.{48fb70d7-bfac-4ab1-bcdd-34f44a30e26c}
+        SWD\MMDEVAPI\{0.0.0.00000000}.{e1f9ea7e-1a96-42ef-bead-e850164bb076}
+    DEVPKEY_Device_Parent [字符串]:
+        USB\VID_0A67&PID_30A2\AP5980_20231123
+    DEVPKEY_Device_Children [字符串列表]:
+        SWD\MMDEVAPI\{0.0.1.00000000}.{48fb70d7-bfac-4ab1-bcdd-34f44a30e26c}
+        SWD\MMDEVAPI\{0.0.0.00000000}.{e1f9ea7e-1a96-42ef-bead-e850164bb076}
+    DEVPKEY_Device_Siblings [字符串列表]:
+        USB\VID_0A67&PID_30A2&MI_03\7&3b1ff4ef&0&0003
+    DEVPKEY_Device_SafeRemovalRequired [布尔型]:
+        FALSE
+    DEVPKEY_Device_ContainerId [GUID]:
+        {16b5dc8e-d125-5b68-bfb3-10182a74f929}
+    DEVPKEY_Device_IsPresent [布尔型]:
+        TRUE
+    DEVPKEY_Device_HasProblem [布尔型]:
+        FALSE
+    {83da6326-97a6-4088-9453-a1923f573b29}[15] [布尔型]:
+        TRUE
+    DEVPKEY_Device_IsRebootRequired [布尔型]:
+        FALSE
+    DEVPKEY_Device_ReportedDeviceIdsHash [UINT32]:
+        0x0DBF5DE4 (230645220)
+    DEVPKEY_Device_InLocalMachineContainer [布尔型]:
+        FALSE
+    DEVPKEY_Device_Stack [字符串列表]:
+        \Driver\ksthunk
+        \Driver\usbaudio
+        \Driver\usbccgp
+    {a8b865dd-2e3d-4094-ad97-e593a70c75d6}[26] [布尔型]:
+        FALSE
+    {3464f7a4-2444-40b1-980a-e0903cb6d912}[10] [UINT32]:
+        0x00000003 (3)
+    DEVPKEY_Device_BusReportedDeviceDesc [字符串]:
+        USB Audio Device
+    DEVPKEY_Device_ConfigurationId [字符串]:
+        wdma_usb.inf:USB\Class_01,USBAudio
+    {80497100-8c73-48b9-aad9-ce387e19c56e}[6] [UINT32]:
+        0x00000000 (0)
+    {83da6326-97a6-4088-9453-a1923f573b29}[3] [字符串]:
+        wdma_usb.inf:ed86ca114a9cb1b5:USBAudio:10.0.26100.4768:USB\Class_01
+    {83da6326-97a6-4088-9453-a1923f573b29}[10] [字符串]:
+        USB\VID_0A67&PID_30A2\AP5980_20231123
+    DEVPKEY_Device_InstallDate [FILETIME]:
+        2025/9/1 2:00:15
+    DEVPKEY_Device_FirstInstallDate [FILETIME]:
+        2025/8/15 1:56:35
+    DEVPKEY_Device_LastArrivalDate [FILETIME]:
+        2025/9/1 2:00:15
+    DEVPKEY_Device_LocationPaths [字符串列表]:
+        PCIROOT(0)#PCI(1600)#PCI(0000)#USBROOT(0)#USB(6)#USBMI(0)
+        PCIROOT(0)#PCI(1600)#PCI(0000)#USBROOT(0)#USB(6)#USB(6)
+        ACPI(_SB_)#ACPI(PCI0)#ACPI(PE50)#ACPI(S1F0)#USBROOT(0)#USB(6)#USBMI(0)
+        ACPI(_SB_)#ACPI(PCI0)#ACPI(PE50)#ACPI(S1F0)#USBROOT(0)#USB(6)#USB(6)
+    DEVPKEY_Device_DriverDate [FILETIME]:
+        2025/7/15 0:00:00
+    DEVPKEY_Device_DriverVersion [字符串]:
+        10.0.26100.4768
+    DEVPKEY_Device_DriverDesc [字符串]:
+        USB Audio Device
+    DEVPKEY_Device_DriverInfPath [字符串]:
+        wdma_usb.inf
+    DEVPKEY_Device_DriverInfSection [字符串]:
+        USBAudio
+    DEVPKEY_Device_MatchingDeviceId [字符串]:
+        USB\Class_01
+    DEVPKEY_Device_DriverProvider [字符串]:
+        Microsoft
+    DEVPKEY_Device_DriverRank [UINT32]:
+        0x00FF2005 (16719877)
+    {a8b865dd-2e3d-4094-ad97-e593a70c75d6}[16] [字符串列表]:
+        ks.inf
+        wdmaudio.inf
+    DEVPKEY_Device_GenericDriverInstalled [布尔型]:
+        TRUE
+    {b3f8fa53-0004-438e-9003-51a46e139bfc}[7] [UINT32]:
+        0x00000000 (0)
+    {d1885396-39d8-4777-bcff-5e3241483416}[0] [UINT32]:
+        0x00000002 (2)
+

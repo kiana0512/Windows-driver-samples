@@ -1,0 +1,136 @@
+Microsoft PnP 工具
+
+实例 ID:                SWD\MMDEVAPI\{0.0.0.00000000}.{e1f9ea7e-1a96-42ef-bead-e850164bb076}
+设备描述:         耳机 (USB Audio Device)
+类名:                 AudioEndpoint
+类 GUID:                 {c166523c-fe0c-4a94-a586-f1a80cfbbf3e}
+制造商名称:          Microsoft
+状态:                     已启动
+驱动程序名称:                audioendpoint.inf
+属性:
+    DEVPKEY_Device_DeviceDesc [字符串]:
+        音频端点
+    DEVPKEY_Device_HardwareIds [字符串列表]:
+        MMDEVAPI\AudioEndpoints
+    DEVPKEY_Device_CompatibleIds [字符串列表]:
+        GenericAudioEndpoint
+        SWD\GenericRaw
+        SWD\Generic
+    DEVPKEY_Device_Class [字符串]:
+        AudioEndpoint
+    DEVPKEY_Device_ClassGuid [GUID]:
+        {c166523c-fe0c-4a94-a586-f1a80cfbbf3e}
+    DEVPKEY_Device_Driver [字符串]:
+        {c166523c-fe0c-4a94-a586-f1a80cfbbf3e}\0003
+    DEVPKEY_Device_ConfigFlags [UINT32]:
+        0x00000000 (0)
+    DEVPKEY_Device_Manufacturer [字符串]:
+        Microsoft
+    DEVPKEY_Device_FriendlyName [字符串]:
+        耳机 (USB Audio Device)
+    DEVPKEY_Device_PDOName [字符串]:
+        \Device\000000ac
+    DEVPKEY_Device_Capabilities [UINT32]:
+        0x000000D0 (208)
+    DEVPKEY_Device_BusTypeGuid [GUID]:
+        {06d10322-7de0-4cef-8e25-197d0e7442e2}
+    DEVPKEY_Device_LegacyBusType [UINT32]:
+        0x0000000F (15)
+    DEVPKEY_Device_BusNumber [UINT32]:
+        0x00000000 (0)
+    DEVPKEY_Device_EnumeratorName [字符串]:
+        SWD
+    DEVPKEY_Device_PowerData [二进制]:
+        38 00 00 00 01 00 00 00 09 00 00 00 00 00 00 00 
+        00 00 00 00 00 00 00 00 00 00 00 00 01 00 00 00 
+        04 00 00 00 04 00 00 00 04 00 00 00 04 00 00 00 
+        04 00 00 00 00 00 00 00
+    DEVPKEY_Device_RemovalPolicy [UINT32]:
+        0x00000003 (3)
+    DEVPKEY_Device_RemovalPolicyDefault [UINT32]:
+        0x00000003 (3)
+    DEVPKEY_Device_InstallState [UINT32]:
+        0x00000000 (0)
+    DEVPKEY_Device_BaseContainerId [GUID]:
+        {16b5dc8e-d125-5b68-bfb3-10182a74f929}
+    DEVPKEY_NAME [字符串]:
+        耳机 (USB Audio Device)
+    DEVPKEY_Device_InstanceId [字符串]:
+        SWD\MMDEVAPI\{0.0.0.00000000}.{e1f9ea7e-1a96-42ef-bead-e850164bb076}
+    DEVPKEY_Device_DevNodeStatus [UINT32]:
+        0x0180200A (25174026)
+    DEVPKEY_Device_ProblemCode [UINT32]:
+        0x00000000 (0)
+    DEVPKEY_Device_Parent [字符串]:
+        USB\VID_0A67&PID_30A2&MI_00\7&3b1ff4ef&0&0000
+    DEVPKEY_Device_Siblings [字符串列表]:
+        SWD\MMDEVAPI\{0.0.1.00000000}.{48fb70d7-bfac-4ab1-bcdd-34f44a30e26c}
+    DEVPKEY_Device_SafeRemovalRequired [布尔型]:
+        FALSE
+    DEVPKEY_Device_ContainerId [GUID]:
+        {16b5dc8e-d125-5b68-bfb3-10182a74f929}
+    DEVPKEY_Device_IsPresent [布尔型]:
+        TRUE
+    DEVPKEY_Device_HasProblem [布尔型]:
+        FALSE
+    {83da6326-97a6-4088-9453-a1923f573b29}[15] [布尔型]:
+        TRUE
+    DEVPKEY_Device_IsRebootRequired [布尔型]:
+        FALSE
+    DEVPKEY_Device_ReportedDeviceIdsHash [UINT32]:
+        0x6C3F389B (1816082587)
+    DEVPKEY_Device_InLocalMachineContainer [布尔型]:
+        FALSE
+    DEVPKEY_Device_Stack [字符串列表]:
+        \Driver\SoftwareDevice
+    {a8b865dd-2e3d-4094-ad97-e593a70c75d6}[26] [布尔型]:
+        FALSE
+    {1f39ec81-2edf-49fe-bbbf-862f89e3f5b2}[2] [UINT32]:
+        0x00000002 (2)
+    {3464f7a4-2444-40b1-980a-e0903cb6d912}[10] [UINT32]:
+        0x00000003 (3)
+    DEVPKEY_Device_BusReportedDeviceDesc [字符串]:
+        耳机 (USB Audio Device)
+    DEVPKEY_Device_ConfigurationId [字符串]:
+        audioendpoint.inf:MMDEVAPI\AudioEndpoints,NO_DRV
+    DEVPKEY_Device_CreatorProcessId [UINT32]:
+        0x000008E0 (2272)
+    DEVPKEY_DeviceContainer_Category [字符串列表]:
+        Audio
+    {80497100-8c73-48b9-aad9-ce387e19c56e}[6] [UINT32]:
+        0x00000000 (0)
+    DEVPKEY_Device_FriendlyNameAttributes [UINT32]:
+        0x00000002 (2)
+    {83da6326-97a6-4088-9453-a1923f573b29}[3] [字符串]:
+        audioendpoint.inf:db04a16cc5e2d48f:NO_DRV:10.0.26100.1:MMDEVAPI\AudioEndpoints
+    DEVPKEY_Device_SessionId [UINT32]:
+        0x00000001 (1)
+    {83da6326-97a6-4088-9453-a1923f573b29}[10] [字符串]:
+        USB\VID_0A67&PID_30A2&MI_00\7&3b1ff4ef&0&0000
+    DEVPKEY_Device_InstallDate [FILETIME]:
+        2025/9/1 2:00:15
+    DEVPKEY_Device_FirstInstallDate [FILETIME]:
+        2025/9/1 2:00:15
+    DEVPKEY_Device_LastArrivalDate [FILETIME]:
+        2025/9/1 2:00:15
+    DEVPKEY_Device_DriverDate [FILETIME]:
+        2024/3/31 0:00:00
+    DEVPKEY_Device_DriverVersion [字符串]:
+        10.0.26100.1
+    DEVPKEY_Device_DriverDesc [字符串]:
+        Audio Endpoint
+    DEVPKEY_Device_DriverInfPath [字符串]:
+        audioendpoint.inf
+    DEVPKEY_Device_DriverInfSection [字符串]:
+        NO_DRV
+    DEVPKEY_Device_MatchingDeviceId [字符串]:
+        MMDEVAPI\AudioEndpoints
+    DEVPKEY_Device_DriverProvider [字符串]:
+        Microsoft
+    DEVPKEY_Device_DriverRank [UINT32]:
+        0x00FF0000 (16711680)
+    DEVPKEY_Device_NoConnectSound [布尔型]:
+        TRUE
+    DEVPKEY_DrvPkg_Icon [字符串列表]:
+        %windir%\system32\mmres.dll,-3031
+

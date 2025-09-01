@@ -1,16 +1,14 @@
-; ====================== MyCompanyUsbApoExt.inf ======================
-; 目的：把 MyCompanyEfxApo.dll 作为端点级 EFX 绑定到 USB\VID_0A67&PID_30A2 的音频功能接口
-; 关键：仅使用 VID/PID&MI_xx 精确匹配，避免 USB\Class_* 兼容 ID（B2.6.4.9）
-
+; ====================== MyCompanyUsbApoExt_patched.inf (EFX on MI_00..03) ======================
 [Version]
 Signature   = "$Windows NT$"
 Class       = Extension
 ClassGuid   = {e2f84ce7-8efa-411c-aa69-97454ca4cb57}
 Provider    = %Mfg%
-DriverVer   = 08/28/2025,1.0.0.6
+DriverVer   = 09/01/2025,1.0.0.9
 CatalogFile = MyCompanyUsbApoExt.cat
 ExtensionId = {E6F0C0C8-2A0D-4B5D-9B6E-6B3D7B2C9D11}
 
+; (Optional) These are harmless here; can be removed if desired
 Include     = ks.inf, wdmaudio.inf
 Needs       = KS.Registration, WDMAUDIO.Registration
 
@@ -18,20 +16,22 @@ Needs       = KS.Registration, WDMAUDIO.Registration
 %Mfg% = Models,NTamd64
 
 [Models.NTamd64]
-; 只列出你设备的具体接口（可按实机保留/删减）
-%UsbDesc% = ApoExt.Install.NTamd64, USB\VID_0A67&PID_30A2&MI_00
-%UsbDesc% = ApoExt.Install.NTamd64, USB\VID_0A67&PID_30A2&MI_01
-%UsbDesc% = ApoExt.Install.NTamd64, USB\VID_0A67&PID_30A2&MI_02
-%UsbDesc% = ApoExt.Install.NTamd64, USB\VID_0A67&PID_30A2&MI_03 
+%UsbDesc_MI00% = ApoExt.Install.NTamd64, USB\VID_0A67&PID_30A2&MI_00
+%UsbDesc_MI01% = ApoExt.Install.NTamd64, USB\VID_0A67&PID_30A2&MI_01
+%UsbDesc_MI02% = ApoExt.Install.NTamd64, USB\VID_0A67&PID_30A2&MI_02
+%UsbDesc_MI03% = ApoExt.Install.NTamd64, USB\VID_0A67&PID_30A2&MI_03
 
-; ===== 安装主节：拷 DLL + 全局 COM 注册 =====
+; ===== Software install: copy DLL and global COM registration =====
 [ApoExt.Install.NTamd64]
 CopyFiles = Apo.Copy
 AddReg    = Apo.ComHKLM.AddReg
 
-; ===== 硬件键（HKR）写入：由 Endpoint Builder 搬运到端点 =====
+; ===== Hardware key (HKR) stamping: executed against the matched devnode =====
 [ApoExt.Install.NTamd64.HW]
-AddReg = Apo.FX.AddReg, Apo.LegacyFx.AddReg, Apo.EP.AddReg
+; Clean first to avoid type/duplicate problems
+DelReg = Apo.FxProps.DelReg, Apo.FX.DelReg, Apo.LegacyFx.DelReg
+; Then add fresh keys
+AddReg = Apo.FxProps.AddReg, Apo.FX.AddReg, Apo.LegacyFx.AddReg, Apo.EP.AddReg
 
 [DestinationDirs]
 Apo.Copy = 11  ; %SystemRoot%\System32
@@ -39,33 +39,52 @@ Apo.Copy = 11  ; %SystemRoot%\System32
 [Apo.Copy]
 MyCompanyEfxApo.dll
 
-; ----- FX\0：EFX 绑定（单值 + 组合），以及 EFX 模式宣告 -----
+; ================== Device Parameters\FxProperties (for your script's "anchor") ==================
+; Types:
+;   "7"  = PKEY_FX_EndpointEffectClsid              -> REG_SZ       (single GUID)
+;   "15" = PKEY_CompositeFX_EndpointEffectClsid     -> REG_MULTI_SZ (one or more GUIDs)
+;   "PM7"= PKEY_EFX_ProcessingModes_Supported_*     -> REG_MULTI_SZ (EFX supports DEFAULT only)
+[Apo.FxProps.AddReg]
+HKR,"Device Parameters\FxProperties","7",   0x00000000,"%ApoClsid%"         ; REG_SZ
+HKR,"Device Parameters\FxProperties","15",  0x00010000,"%ApoClsid%"         ; REG_MULTI_SZ
+HKR,"Device Parameters\FxProperties","PM7", 0x00010000,"%AUDIO_SIGNALPROCESSINGMODE_DEFAULT%" ; REG_MULTI_SZ
+
+[Apo.FxProps.DelReg]
+; Delete the three value names if present (safe even if missing)
+HKR,"Device Parameters\FxProperties","7"
+HKR,"Device Parameters\FxProperties","15"
+HKR,"Device Parameters\FxProperties","PM7"
+
+; ================== FX\0 (preferred source for AudioEndpointBuilder mirroring) ==================
+;   {D04E05A6-594B-4fb6-A80D-01AF5EED7D1D},7  -> PKEY_FX_EndpointEffectClsid
+;   {D04E05A6-594B-4fb6-A80D-01AF5EED7D1D},15 -> PKEY_CompositeFX_EndpointEffectClsid
+;   {D3993A3F-99C2-4402-B5EC-A92A0367664B},7  -> PKEY_EFX_ProcessingModes_Supported_For_Streaming
 [Apo.FX.AddReg]
-; 单 EFX（老路径，仍写以兼容）
-HKR,"FX\0",%PKEY_FX_EndpointEffectClsid%,0x00000000,%ApoClsid%
+HKR,"FX\0","{D04E05A6-594B-4fb6-A80D-01AF5EED7D1D},7",   0x00000000,"%ApoClsid%"
+HKR,"FX\0","{D04E05A6-594B-4fb6-A80D-01AF5EED7D1D},15",  0x00010000,"%ApoClsid%"
+HKR,"FX\0","{D3993A3F-99C2-4402-B5EC-A92A0367664B},7",   0x00010000,"%AUDIO_SIGNALPROCESSINGMODE_DEFAULT%"
 
-; 组合 EFX（Win10 1803+）：支持与系统现有效果共存
-HKR,"FX\0",%PKEY_CompositeFX_EndpointEffectClsid%,0x00010000,%ApoClsid%
+[Apo.FX.DelReg]
+; Delete the whole FX\0 branch to avoid stale value types
+HKR,"FX\0"
 
-; 规范：EFX 仅允许 DEFAULT 模式
-HKR,"FX\0",%PKEY_EFX_ProcessingModes_Supported_For_Streaming%,0x00010000,%AUDIO_SIGNALPROCESSINGMODE_DEFAULT%
-
-; （如需 SFX/MFX，再追加相应 PKEY；先最小化以确保路径打通）
-
-; ----- 旧式 FX\{CLSID}（少量路径仍会参考）-----
+; ================== Legacy FX\{CLSID} (compat path; optional) ==================
 [Apo.LegacyFx.AddReg]
-HKR,FX\%ApoClsidStr%,Dll,  0x00000000,"MyCompanyEfxApo.dll"
-HKR,FX\%ApoClsidStr%,EFX,  0x00010001,1
-HKR,FX\%ApoClsidStr%,Order,0x00010001,100
+HKR,"FX\%ApoClsidStr%", "Dll",   0x00000000,"MyCompanyEfxApo.dll"
+HKR,"FX\%ApoClsidStr%", "EFX",   0x00010001,1
+HKR,"FX\%ApoClsidStr%", "Order", 0x00010001,100
 
-; ----- 端点属性（从 EP\0 搬运到 FxProperties\Properties）-----
+[Apo.LegacyFx.DelReg]
+HKR,"FX\%ApoClsidStr%"
+
+; ================== Endpoint toggles (EP\0) ==================
+; Enable the system effects pipeline (do NOT disable)
 [Apo.EP.AddReg]
-; 禁用增强=0，确保启用系统效果管线
 HKR,"EP\0","{1DA5D803-D492-4EDD-8C23-E0C0FFEE7F0E},5",0x00010001,0
 
-; ===== COM/CLSID 注册（x64 视图） =====
+; ================== COM/CLSID ==================
 [Apo.ComHKLM.AddReg]
-HKLM,SOFTWARE\Classes\CLSID\%ApoClsid%,,0x00000000,"%UsbDesc%"
+HKLM,SOFTWARE\Classes\CLSID\%ApoClsid%,,0x00000000,"%UsbDesc_MI00%"
 HKLM,SOFTWARE\Classes\CLSID\%ApoClsid%\InProcServer32,,0x00000000,"%11%\MyCompanyEfxApo.dll"
 HKLM,SOFTWARE\Classes\CLSID\%ApoClsid%\InProcServer32,ThreadingModel,0x00000000,"Both"
 
@@ -76,27 +95,21 @@ HKLM,SOFTWARE\Classes\CLSID\%ApoClsid%\InProcServer32,ThreadingModel,0x00000000,
 MyCompanyEfxApo.dll = 1
 
 [Strings]
-Mfg       = "MyCompany"
-UsbDesc   = "MyCompany USB Audio EFX APO"
-DiskName  = "MyCompany APO Package"
+Mfg          = "MyCompany"
+UsbDesc_MI00 = "MyCompany USB Audio EFX APO"
+UsbDesc_MI01 = "MyCompany USB Audio EFX APO"
+UsbDesc_MI02 = "MyCompany USB Audio EFX APO"
+UsbDesc_MI03 = "MyCompany USB Audio EFX APO"
+DiskName     = "MyCompany APO Package"
 
-; 你的 EFX CLSID
+; Your EFX CLSID (must match your DLL registration)
 ApoClsid    = "{8E3E0B71-5B8A-45C9-9B3D-3A2E5B418A10}"
 ApoClsidStr = "{8E3E0B71-5B8A-45C9-9B3D-3A2E5B418A10}"
 
-; PKEY 定义（微软官方）
-PKEY_FX_StreamEffectClsid              = "{D04E05A6-594B-4FB6-A80D-01AF5EED7D1D},5"
-PKEY_FX_ModeEffectClsid                = "{D04E05A6-594B-4FB6-A80D-01AF5EED7D1D},6"
-PKEY_FX_EndpointEffectClsid            = "{D04E05A6-594B-4FB6-A80D-01AF5EED7D1D},7"
-PKEY_CompositeFX_StreamEffectClsid     = "{D04E05A6-594B-4FB6-A80D-01AF5EED7D1D},13"
-PKEY_CompositeFX_ModeEffectClsid       = "{D04E05A6-594B-4FB6-A80D-01AF5EED7D1D},14"
-PKEY_CompositeFX_EndpointEffectClsid   = "{D04E05A6-594B-4FB6-A80D-01AF5EED7D1D},15"
-PKEY_EFX_ProcessingModes_Supported_For_Streaming = "{D3993A3F-99C2-4402-B5EC-A92A0367664B},6"
-
-; DEFAULT 处理模式 GUID
+; EFX supports DEFAULT only
 AUDIO_SIGNALPROCESSINGMODE_DEFAULT = "{C18E2F7E-933D-4965-B7D1-1EEF228D2AF3}"
 
-; 可选：右键安装不报错
+; Optional right-click "Install": copy+COM only
 [DefaultInstall.NTamd64]
 CopyFiles = Apo.Copy
 AddReg    = Apo.ComHKLM.AddReg
