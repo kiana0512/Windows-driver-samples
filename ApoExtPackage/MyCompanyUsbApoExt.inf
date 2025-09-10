@@ -4,11 +4,11 @@ Signature   = "$Windows NT$"
 Class       = Extension
 ClassGuid   = {e2f84ce7-8efa-411c-aa69-97454ca4cb57}
 Provider    = %Mfg%
-DriverVer   = 09/01/2025,1.0.0.9
+DriverVer   = 09/01/2025,1.0.0.10         ; NOTE: 版本 +0.0.0.1，便于强制刷新安装
 CatalogFile = MyCompanyUsbApoExt.cat
 ExtensionId = {E6F0C0C8-2A0D-4B5D-9B6E-6B3D7B2C9D11}
 
-; (Optional) These are harmless here; can be removed if desired
+; （可选）注册基础类，方便某些老系统对 FX\0 键的解释 —— 保留不变
 Include     = ks.inf, wdmaudio.inf
 Needs       = KS.Registration, WDMAUDIO.Registration
 
@@ -21,56 +21,57 @@ Needs       = KS.Registration, WDMAUDIO.Registration
 %UsbDesc_MI02% = ApoExt.Install.NTamd64, USB\VID_0A67&PID_30A2&MI_02
 %UsbDesc_MI03% = ApoExt.Install.NTamd64, USB\VID_0A67&PID_30A2&MI_03
 
-; ===== Software install: copy DLL and global COM registration =====
+; ===== 软件部署：拷贝 DLL + COM 注册 =====
 [ApoExt.Install.NTamd64]
 CopyFiles = Apo.Copy
-AddReg    = Apo.ComHKLM.AddReg
+AddReg    = Apo.ComHKCR.AddReg         ; NOTE: 改成 HKCR 写入（等价于你之前的 HKLM\Software\Classes），更符合习惯
+; 说明：COM 注册我们写到 HKCR（合并视图）。在 x64 驱动包内写入的是 64 位视图，满足 audiodg(x64) 需要。
 
-; ===== Hardware key (HKR) stamping: executed against the matched devnode =====
+; ===== 硬件节点（HKR）覆写：作用于命中的 devnode =====
 [ApoExt.Install.NTamd64.HW]
-; Clean first to avoid type/duplicate problems
+; 先清理，避免类型不匹配或残留
 DelReg = Apo.FxProps.DelReg, Apo.FX.DelReg, Apo.LegacyFx.DelReg
-; Then add fresh keys
+; 然后新写
 AddReg = Apo.FxProps.AddReg, Apo.FX.AddReg, Apo.LegacyFx.AddReg, Apo.EP.AddReg
 
 [DestinationDirs]
-Apo.Copy = 11  ; %SystemRoot%\System32
+Apo.Copy = 11  ; %SystemRoot%\System32 （x64 DLL 放这里，audiodg 才能加载）
 
 [Apo.Copy]
 MyCompanyEfxApo.dll
 
-; ================== Device Parameters\FxProperties (for your script's "anchor") ==================
+; ================== Device Parameters\FxProperties（供脚本锚定 & AEB 可镜像） ==================
 ; Types:
-;   "7"  = PKEY_FX_EndpointEffectClsid              -> REG_SZ       (single GUID)
-;   "15" = PKEY_CompositeFX_EndpointEffectClsid     -> REG_MULTI_SZ (one or more GUIDs)
-;   "PM7"= PKEY_EFX_ProcessingModes_Supported_*     -> REG_MULTI_SZ (EFX supports DEFAULT only)
+;   "7"   = PKEY_FX_EndpointEffectClsid              -> REG_SZ
+;   "15"  = PKEY_CompositeFX_EndpointEffectClsid     -> REG_MULTI_SZ
+;   "PM7" = PKEY_EFX_ProcessingModes_Supported_*     -> REG_MULTI_SZ（此键主要给脚本/自标记使用）
 [Apo.FxProps.AddReg]
-HKR,"Device Parameters\FxProperties","7",   0x00000000,"%ApoClsid%"         ; REG_SZ
-HKR,"Device Parameters\FxProperties","15",  0x00010000,"%ApoClsid%"         ; REG_MULTI_SZ
+HKR,"Device Parameters\FxProperties","7",   0x00000000,"%ApoClsid%"         ; REG_SZ，单 GUID
+HKR,"Device Parameters\FxProperties","15",  0x00010000,"%ApoClsid%"         ; REG_MULTI_SZ，可堆叠
 HKR,"Device Parameters\FxProperties","PM7", 0x00010000,"%AUDIO_SIGNALPROCESSINGMODE_DEFAULT%" ; REG_MULTI_SZ
 
 [Apo.FxProps.DelReg]
-; Delete the three value names if present (safe even if missing)
 HKR,"Device Parameters\FxProperties","7"
 HKR,"Device Parameters\FxProperties","15"
 HKR,"Device Parameters\FxProperties","PM7"
 
-; ================== FX\0 (preferred source for AudioEndpointBuilder mirroring) ==================
-;   {D04E05A6-594B-4fb6-A80D-01AF5EED7D1D},7  -> PKEY_FX_EndpointEffectClsid
-;   {D04E05A6-594B-4fb6-A80D-01AF5EED7D1D},15 -> PKEY_CompositeFX_EndpointEffectClsid
-;   {D3993A3F-99C2-4402-B5EC-A92A0367664B},7  -> PKEY_EFX_ProcessingModes_Supported_For_Streaming
+; ================== FX\0（AEB 的首选来源；官方推荐路径） ==================
+; {D04E05A6-594B-4fb6-A80D-01AF5EED7D1D},7   -> PKEY_FX_EndpointEffectClsid
+; {D04E05A6-594B-4fb6-A80D-01AF5EED7D1D},15  -> PKEY_CompositeFX_EndpointEffectClsid
+; {D3993A3F-99C2-4402-B5EC-A92A0367664B},7   -> PKEY_EFX_ProcessingModes_Supported_For_Streaming（REG_MULTI_SZ）
 [Apo.FX.AddReg]
 HKR,"FX\0","{D04E05A6-594B-4fb6-A80D-01AF5EED7D1D},7",   0x00000000,"%ApoClsid%"
 HKR,"FX\0","{D04E05A6-594B-4fb6-A80D-01AF5EED7D1D},15",  0x00010000,"%ApoClsid%"
 HKR,"FX\0","{D3993A3F-99C2-4402-B5EC-A92A0367664B},7",   0x00010000,"%AUDIO_SIGNALPROCESSINGMODE_DEFAULT%"
 
 [Apo.FX.DelReg]
-; Delete the whole FX\0 branch to avoid stale value types
+; NOTE: 直接删整个分支，避免旧值类型残留
 HKR,"FX\0"
 
-; ================== Legacy FX\{CLSID} (compat path; optional) ==================
+; ================== Legacy FX\{CLSID}（兼容路径，某些老系统仍读取；保留） ==================
 [Apo.LegacyFx.AddReg]
-HKR,"FX\%ApoClsidStr%", "Dll",   0x00000000,"MyCompanyEfxApo.dll"
+; NOTE: Dll 用 **绝对路径** 更稳健（你之前只写了文件名，也能用，但遇到 PATH/重定向问题会更脆）
+HKR,"FX\%ApoClsidStr%", "Dll",   0x00000000,"%11%\MyCompanyEfxApo.dll"
 HKR,"FX\%ApoClsidStr%", "EFX",   0x00010001,1
 HKR,"FX\%ApoClsidStr%", "Order", 0x00010001,100
 
@@ -78,15 +79,16 @@ HKR,"FX\%ApoClsidStr%", "Order", 0x00010001,100
 HKR,"FX\%ApoClsidStr%"
 
 ; ================== Endpoint toggles (EP\0) ==================
-; Enable the system effects pipeline (do NOT disable)
+; {1DA5D803-D492-4EDD-8C23-E0C0FFEE7F0E},5 => DisableSystemEffects（0 = 启用系统效果）
 [Apo.EP.AddReg]
 HKR,"EP\0","{1DA5D803-D492-4EDD-8C23-E0C0FFEE7F0E},5",0x00010001,0
 
 ; ================== COM/CLSID ==================
-[Apo.ComHKLM.AddReg]
-HKLM,SOFTWARE\Classes\CLSID\%ApoClsid%,,0x00000000,"%UsbDesc_MI00%"
-HKLM,SOFTWARE\Classes\CLSID\%ApoClsid%\InProcServer32,,0x00000000,"%11%\MyCompanyEfxApo.dll"
-HKLM,SOFTWARE\Classes\CLSID\%ApoClsid%\InProcServer32,ThreadingModel,0x00000000,"Both"
+; NOTE: 用 HKCR（合并视图）写入；等价于 HKLM\Software\Classes，x64 安装时会落到 64 位视图
+[Apo.ComHKCR.AddReg]
+HKCR,CLSID\%ApoClsid%,,0x00000000,"%UsbDesc_MI00%"
+HKCR,CLSID\%ApoClsid%\InprocServer32,,0x00000000,"%11%\MyCompanyEfxApo.dll"
+HKCR,CLSID\%ApoClsid%\InprocServer32,ThreadingModel,0x00000000,"Both"
 
 [SourceDisksNames]
 1 = %DiskName%,,,
@@ -106,10 +108,10 @@ DiskName     = "MyCompany APO Package"
 ApoClsid    = "{8E3E0B71-5B8A-45C9-9B3D-3A2E5B418A10}"
 ApoClsidStr = "{8E3E0B71-5B8A-45C9-9B3D-3A2E5B418A10}"
 
-; EFX supports DEFAULT only
+; EFX supports DEFAULT only（先按 DEFAULT；后续可按需加 COMMUNICATIONS/MULTIMEDIA/SPEECH）
 AUDIO_SIGNALPROCESSINGMODE_DEFAULT = "{C18E2F7E-933D-4965-B7D1-1EEF228D2AF3}"
 
-; Optional right-click "Install": copy+COM only
+; Optional right-click "Install": copy+COM only（便于“右键安装”调试 COM）
 [DefaultInstall.NTamd64]
 CopyFiles = Apo.Copy
-AddReg    = Apo.ComHKLM.AddReg
+AddReg    = Apo.ComHKCR.AddReg
